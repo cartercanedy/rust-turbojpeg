@@ -18,24 +18,29 @@ fn main() -> Result<()> {
 enum LinkKind {
     Static,
     Dynamic,
-    Default,
 }
 
 fn get_link_kind() -> Result<LinkKind> {
-    let static_env = env_bool("TURBOJPEG_STATIC")?;
-    let dynamic_env = env_bool("TURBOJPEG_DYNAMIC")?.or(env_bool("TURBOJPEG_SHARED")?);
+    #[cfg(feature = "link-dynamic")] {
+        Ok(LinkKind::Dynamic)
+    }
 
-    match (static_env, dynamic_env) {
-        (Some(true), Some(true)) =>
-            bail!("Both TURBOJPEG_STATIC and TURBOJPEG_DYNAMIC/TURBOJPEG_SHARED are set to 1"),
-        (Some(false), Some(false)) =>
-            bail!("Both TURBOJPEG_STATIC and TURBOJPEG_DYNAMIC/TURBOJPEG_SHARED are set to 0"),
-        (None, None) =>
-            Ok(LinkKind::Default),
-        (Some(true) | None, Some(false) | None) =>
-            Ok(LinkKind::Static),
-        (Some(false) | None, Some(true) | None) =>
-            Ok(LinkKind::Dynamic),
+    #[cfg(not(feature = "link-dynamic"))] {
+        let static_env = env_bool("TURBOJPEG_STATIC")?;
+        let dynamic_env = env_bool("TURBOJPEG_DYNAMIC")?.or(env_bool("TURBOJPEG_SHARED")?);
+
+        match (static_env, dynamic_env) {
+            (Some(true), Some(true)) =>
+                bail!("Both TURBOJPEG_STATIC and TURBOJPEG_DYNAMIC/TURBOJPEG_SHARED are set to 1"),
+            (Some(false), Some(false)) =>
+                bail!("Both TURBOJPEG_STATIC and TURBOJPEG_DYNAMIC/TURBOJPEG_SHARED are set to 0"),
+            (None, None) =>
+                Ok(LinkKind::Static),
+            (Some(true) | None, Some(false) | None) =>
+                Ok(LinkKind::Static),
+            (Some(false) | None, Some(true) | None) =>
+                Ok(LinkKind::Dynamic),
+        }
     }
 }
 
@@ -86,7 +91,6 @@ fn find_pkg_config(link_kind: LinkKind) -> Result<Library> {
     match link_kind {
         LinkKind::Static => { cfg.statik(true); },
         LinkKind::Dynamic => { cfg.statik(false); },
-        LinkKind::Default => {},
     }
 
     let lib = cfg.probe("libturbojpeg")
@@ -122,7 +126,7 @@ fn find_explicit(link_kind: LinkKind) -> Result<Library> {
 
     println!("cargo:rustc-link-search=native={}", lib_dir.display());
     println!("cargo:rustc-link-lib={}=turbojpeg", match link_kind {
-        LinkKind::Static | LinkKind::Default => "static",
+        LinkKind::Static => "static",
         LinkKind::Dynamic => "dylib",
     });
 
@@ -175,9 +179,9 @@ fn build_vendor(link_kind: LinkKind) -> Result<Library> {
 
     println!("cargo:rustc-link-search=native={}", lib_path.display());
     println!("cargo:rustc-link-lib={}=turbojpeg{}", match link_kind {
-        LinkKind::Static | LinkKind::Default => "static",
+        LinkKind::Static => "static",
         LinkKind::Dynamic => "dylib",
-    }, if is_msvc && matches!(link_kind, LinkKind::Static | LinkKind::Default) {
+    }, if is_msvc && matches!(link_kind, LinkKind::Static) {
         "-static"
     } else {
         ""
