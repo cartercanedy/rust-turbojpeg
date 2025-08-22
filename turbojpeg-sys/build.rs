@@ -170,7 +170,11 @@ fn build_vendor(link_kind: LinkKind) -> Result<Library> {
         cmake.configure_arg(format!("-DANDROID_ABI={android_abi}"));
     }
 
-    let dst_path = cmake.build();
+    println!("cargo:warning=CMake profile: {}", cmake.get_profile());
+
+    let dst_path = cmake
+        .profile("Release")
+        .build();
 
     let lib_path = dst_path.join("lib");
     let include_path = dst_path.join("include");
